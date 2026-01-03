@@ -1,29 +1,15 @@
-# Core dependencies for Narrator - Fine-tuning Llama 3.2 3B on Children's Stories
-
-# Deep Learning & Transformers
+# Deep Learning & Transformers (required)
 torch>=2.1.0
 transformers>=4.40.0
 accelerate>=0.27.0
 peft>=0.9.0
 
+# Quantization (REQUIRED for QLoRA 4-bit)
+bitsandbytes>=0.41.0
+
 # Data Processing
 datasets>=2.16.0
 tqdm>=4.66.0
 
-# Project Gutenberg Download
+# Download books from Project Gutenberg
 requests>=2.31.0
-
-# Utilities
-numpy>=1.24.0
-pandas>=2.0.0
-
-# Jupyter (for EDA)
-jupyter>=1.0.0
-ipykernel>=6.29.0
-
-# Training Utilities
-wandb>=0.16.0  # Optional: for experiment tracking
-tensorboard>=2.15.0  # Optional: for logging
-
-# Configuration
-pyyaml>=6.0.0
