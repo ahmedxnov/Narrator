@@ -7,8 +7,7 @@ A complete pipeline for fine-tuning Meta's Llama 3.2 3B model on high-quality ch
 This project demonstrates how to:
 - Filter and curate 4,000+ child-friendly stories from Project Gutenberg's 71,000+ book collection
 - Clean and prepare text data for language model training
-- Convert Meta Llama checkpoints to Hugging Face format
-- Fine-tune Llama 3.2 3B using LoRA on a 12GB GPU (RTX 5070)
+- Fine-tune Llama 3.2 3B using QLoRA on consumer GPUs (12GB+)
 - Generate child-friendly narratives using the trained model
 
 ## 📊 Dataset Statistics
@@ -74,21 +73,48 @@ conda activate narrator
 pip install -r requirements.txt
 ```
 
-### 2. Data Preparation
+### 2. HuggingFace Setup (Required)
+
+Before downloading or tokenizing data, you need access to Llama 3.2 3B:
+
+**Step 1: Create HuggingFace Access Token**
+1. Go to https://huggingface.co/settings/tokens
+2. Click your **Profile** → **Settings** → **Access Tokens**
+3. Click **"Create new token"**
+4. Choose **"Read"** type (recommended for model access)
+5. Copy the generated token
+
+**Step 2: Login via Terminal**
+```bash
+# Open terminal and run
+hf auth login
+
+# Paste your access token when prompted
+# Token: [paste your token here]
+```
+
+**Step 3: Request Model Access**
+1. Visit https://huggingface.co/meta-llama/Llama-3.2-3B
+2. Click **"Request Access"** button
+3. Accept Meta's license agreement
+4. Wait for approval (usually takes a few minutes to hours)
+5. Once approved, you can use the model and tokenizer
+
+### 3. Data Preparation
 
 #### Option A: Use Pre-filtered Book IDs (Recommended)
 
 ```bash
-# Download the curated stories (4,035 books)
+# Download the curated stories (4,036 books)
 python scripts/download_gutenberg.py --ids-file curated_ids.txt --output-dir dataset
 
-# Clean the downloaded texts
+# Clean the downloaded texts (parallel processing auto-enabled)
 python scripts/clean_dataset.py --input-dir dataset --output-dir cleaned_dataset
 
-# Create train/val split
+# Create train/val split (parallel file copying auto-enabled)
 python scripts/create_train_val_split.py --input-dir cleaned_dataset --output-dir split_data --train-ratio 0.9
 
-# Prepare tokenized dataset (chunks and tokenizes in one step)
+# Prepare tokenized dataset (requires HuggingFace access - see step 2)
 python scripts/prepare_dataset.py --max-length 1024 --output-dir tokenized_data_1024
 ```
 
@@ -96,36 +122,20 @@ python scripts/prepare_dataset.py --max-length 1024 --output-dir tokenized_data_
 
 See `notebooks/EDA_books.ipynb` for the complete filtering process.
 
-### 3. Model Preparation
-
-#### Option A: Convert Meta Checkpoint (Current Setup)
-
-1. Download Llama 3.2 3B from Meta AI
-2. Convert to HuggingFace format:
-
-```bash
-python scripts/convert_checkpoint.py \
-    --input-dir "path/to/meta/checkpoint" \
-    --output-dir "models/llama-3.2-3b-hf"
-```
-
-The model will be saved to `models/llama-3.2-3b-hf/` and training will use this local path.
-
-#### Option B: Use HuggingFace Hub (Alternative)
-
-Change `training_config.yaml`:
-```yaml
-model:
-  name: "meta-llama/Llama-3.2-3B"  # Instead of models/llama-3.2-3b-hf
-```
-Requires HuggingFace access token. Model auto-downloads on first run.
-
 ### 4. Fine-tuning
 
+The model will automatically download from HuggingFace on first run (requires access from step 2).
+
 ```bash
-# WSL2/Ubuntu or Google Colab recommended
-python -m scripts.train
+# Google Colab or WSL2/Ubuntu recommended
+python scripts/train.py
 ```
+
+**Important Notes:**
+- First run will download the 4-bit quantized model (~2-3GB)
+- Training saves checkpoints to `./checkpoints/` every 3,000 steps
+- Google Colab: Complete within 12-hour session limit (~9-10 hours for 50% of data)
+- Local: No time limits, but use WSL2 on Windows (native Windows is 50-100x slower)
 
 ## 💾 Hardware Requirements
 
