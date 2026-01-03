@@ -2,7 +2,7 @@
 
 # Model settings
 model:
-  name: "models/llama-3.2-3b-hf"  # Use local converted model
+  name: "meta-llama/Llama-3.2-3B"  # HuggingFace model (auto-downloads)
   max_seq_length: 1024  # Reduced from 2048 for speed
   
 # QLoRA 4-bit quantization for speed and memory efficiency
@@ -25,16 +25,16 @@ lora:
   bias: "none"
   task_type: "CAUSAL_LM"
 
-# Training hyperparameters (Optimized for RTX 5070 12GB on WSL2/Ubuntu)
+# Training hyperparameters (OPTIMIZED to finish in <12 hours on Google Colab T4)
 training:
   output_dir: "./checkpoints"
-  num_train_epochs: 1                      # Start with 1 epoch, monitor overfitting
-  per_device_train_batch_size: 1           # Reduced for 12GB VRAM
-  per_device_eval_batch_size: 1
-  gradient_accumulation_steps: 1           # No accumulation for max speed
+  num_train_epochs: 0.5                    # 50% of data, finishes in ~9-10 hours
+  per_device_train_batch_size: 8           # Max for T4 16GB with 4-bit
+  per_device_eval_batch_size: 8
+  gradient_accumulation_steps: 2           # Effective batch size = 16
   learning_rate: 2.0e-4                    # Standard for QLoRA fine-tuning
   weight_decay: 0.01
-  warmup_ratio: 0.05                       # 5% warmup
+  warmup_ratio: 0.02                       # Minimal warmup for speed
   lr_scheduler_type: "cosine"
   
   # Optimization
@@ -42,31 +42,32 @@ training:
   max_grad_norm: 1.0
   
   # Memory optimization
-  gradient_checkpointing: false  # Not needed with 4-bit QLoRA (only uses ~2GB)
+  gradient_checkpointing: false  # Disabled for speed
   fp16: false
-  bf16: true  # Use bfloat16 (best for RTX 50-series)
+  bf16: true  # Use bfloat16
   
-  # Logging and evaluation
-  logging_steps: 10
+  # Logging and evaluation (MINIMAL for speed)
+  logging_steps: 100                       # Log every 100 steps
   eval_strategy: "steps"
-  eval_steps: 500
+  eval_steps: 3000                         # Eval only 3 times during training
   save_strategy: "steps"
-  save_steps: 500
-  save_total_limit: 3
+  save_steps: 3000                         # Save only 3 times
+  save_total_limit: 2                      # Keep only 2 checkpoints
   
-  # Data loading
-  dataloader_num_workers: 0      # Disable workers to save memory
-  dataloader_pin_memory: true    # Enable for faster GPU transfer
+  # Data loading (OPTIMIZED)
+  dataloader_num_workers: 2                # Parallel data loading
+  dataloader_pin_memory: true              # Faster GPU transfer
+  dataloader_prefetch_factor: 2            # Prefetch batches
   
   # Reproducibility
   seed: 42
   
   # Performance optimization
-  torch_compile: false  # Set true for PyTorch 2.x speedup (first epoch slower due to compilation)
+  torch_compile: false  # Keep false (compilation overhead not worth it)
 
 # Dataset paths
 data:
-  tokenized_dir: "/home/ahmedxnov/tokenized_data_1024"  # Linux filesystem, 1024 seq length
+  tokenized_dir: "tokenized_data_1024"  # Relative path (works on Colab and local)
   
 # Weights & Biases (optional)
 wandb:

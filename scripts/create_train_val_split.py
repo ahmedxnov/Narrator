@@ -10,21 +10,39 @@ import argparse
 import random
 import shutil
 from pathlib import Path
+from multiprocessing import Pool, cpu_count
+from tqdm import tqdm
+
+
+def copy_file(args):
+    """Copy a single file (for parallel processing).
+    
+    Args:
+        args: Tuple of (source_file, dest_dir)
+        
+    Returns:
+        filename
+    """
+    source_file, dest_dir = args
+    shutil.copy2(source_file, dest_dir / source_file.name)
+    return source_file.name
 
 
 def create_split(
     input_dir: Path,
     output_dir: Path,
     train_ratio: float = 0.9,
-    seed: int = 42
+    seed: int = 42,
+    num_workers: int = None
 ) -> None:
-    """Split cleaned texts into train and validation sets.
+    """Split cleaned texts into train and validation sets with parallel file copying.
     
     Args:
         input_dir: Directory containing cleaned text files
         output_dir: Directory to create train/ and val/ subdirectories
         train_ratio: Proportion of data for training (default: 0.9)
         seed: Random seed for reproducibility
+        num_workers: Number of parallel workers (None = auto)
     """
     # Set random seed for reproducibility
     random.seed(seed)
@@ -57,19 +75,33 @@ def create_split(
     train_dir.mkdir(parents=True, exist_ok=True)
     val_dir.mkdir(parents=True, exist_ok=True)
     
-    # Copy files to train directory
-    print(f"\nCopying {n_train} files to {train_dir}...")
-    for i, file in enumerate(train_files, 1):
-        shutil.copy2(file, train_dir / file.name)
-        if i % 500 == 0:
-            print(f"  Copied {i}/{n_train} train files...")
+    # Determine number of workers
+    if num_workers is None:
+        num_workers = max(1, cpu_count() - 1)
     
-    # Copy files to val directory
+    print(f"\nCopying files with {num_workers} workers...")
+    
+    # Copy files to train directory in parallel
+    print(f"\nCopying {n_train} files to {train_dir}...")
+    train_args = [(file, train_dir) for file in train_files]
+    
+    with Pool(num_workers) as pool:
+        list(tqdm(
+            pool.imap(copy_file, train_args),
+            total=len(train_files),
+            desc="Train files"
+        ))
+    
+    # Copy files to val directory in parallel
     print(f"\nCopying {n_val} files to {val_dir}...")
-    for i, file in enumerate(val_files, 1):
-        shutil.copy2(file, val_dir / file.name)
-        if i % 100 == 0:
-            print(f"  Copied {i}/{n_val} val files...")
+    val_args = [(file, val_dir) for file in val_files]
+    
+    with Pool(num_workers) as pool:
+        list(tqdm(
+            pool.imap(copy_file, val_args),
+            total=len(val_files),
+            desc="Val files"
+        ))
     
     print(f"\n{'='*60}")
     print(f"Split complete!")
@@ -105,6 +137,12 @@ def main() -> int:
         default=42,
         help="Random seed for reproducibility (default: 42)"
     )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="Number of parallel workers (default: CPU count - 1)"
+    )
     
     args = parser.parse_args()
     
@@ -119,7 +157,7 @@ def main() -> int:
         print(f"Error: train_ratio must be between 0 and 1, got {args.train_ratio}")
         return 1
     
-    create_split(input_dir, output_dir, args.train_ratio, args.seed)
+    create_split(input_dir, output_dir, args.train_ratio, args.seed, args.num_workers)
     return 0
 
 

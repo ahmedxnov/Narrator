@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data directories (large files - download via scripts instead)
+dataset/
+curated_dataset/
+cleaned_dataset/
+split_data/
+processed_data/
+tokenized_data/
+tokenized_data_1024/
+rdf-files/
+
+# Model checkpoints (very large - download separately)
+models/
+checkpoints/
+outputs/
+runs/
+
+# Keep only the curated IDs list
+!curated_ids.txt
+
+# Logs and cache
+*.log
+logs/
+wandb/
+.cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+temp/

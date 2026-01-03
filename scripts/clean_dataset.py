@@ -11,6 +11,8 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
+from multiprocessing import Pool, cpu_count
+from tqdm import tqdm
 
 
 def clean_gutenberg_text(text: str) -> str:
@@ -100,49 +102,83 @@ def clean_gutenberg_text(text: str) -> str:
     return content
 
 
-def clean_dataset(input_dir: Path, output_dir: Path, min_length: int = 1000) -> None:
-    """Clean all text files in the input directory.
+def process_file(args):
+    """Process a single file (for parallel processing).
+    
+    Args:
+        args: Tuple of (txt_file, output_dir, min_length)
+        
+    Returns:
+        Tuple of (status, filename, message)
+    """
+    txt_file, output_dir, min_length = args
+    
+    try:
+        # Read the raw text
+        raw_text = txt_file.read_text(encoding='utf-8', errors='ignore')
+        
+        # Clean the text
+        cleaned_text = clean_gutenberg_text(raw_text)
+        
+        # Validate the cleaned text
+        if len(cleaned_text) < min_length:
+            return ('skipped', txt_file.name, f'too short ({len(cleaned_text)} chars)')
+        
+        # Save the cleaned text
+        output_file = output_dir / txt_file.name
+        output_file.write_text(cleaned_text, encoding='utf-8')
+        
+        return ('success', txt_file.name, len(cleaned_text))
+        
+    except Exception as e:
+        return ('failed', txt_file.name, str(e))
+
+
+def clean_dataset(input_dir: Path, output_dir: Path, min_length: int = 1000, num_workers: int = None) -> None:
+    """Clean all text files in the input directory with parallel processing.
     
     Args:
         input_dir: Directory containing raw Gutenberg texts
         output_dir: Directory to save cleaned texts
         min_length: Minimum character length for a valid cleaned text
+        num_workers: Number of parallel workers (None = auto)
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     
     txt_files = list(input_dir.glob("*.txt"))
     print(f"Found {len(txt_files)} text files in {input_dir}")
     
+    # Determine number of workers
+    if num_workers is None:
+        num_workers = max(1, cpu_count() - 1)
+    
+    print(f"Processing with {num_workers} workers...\n")
+    
+    # Prepare arguments for parallel processing
+    args_list = [(txt_file, output_dir, min_length) for txt_file in txt_files]
+    
+    # Process files in parallel
     cleaned_count = 0
     skipped_count = 0
     failed_count = 0
     
-    for txt_file in txt_files:
-        try:
-            # Read the raw text
-            raw_text = txt_file.read_text(encoding='utf-8', errors='ignore')
-            
-            # Clean the text
-            cleaned_text = clean_gutenberg_text(raw_text)
-            
-            # Validate the cleaned text
-            if len(cleaned_text) < min_length:
-                print(f"Skipped {txt_file.name}: too short after cleaning ({len(cleaned_text)} chars)")
-                skipped_count += 1
-                continue
-            
-            # Save the cleaned text
-            output_file = output_dir / txt_file.name
-            output_file.write_text(cleaned_text, encoding='utf-8')
-            
+    with Pool(num_workers) as pool:
+        results = list(tqdm(
+            pool.imap(process_file, args_list),
+            total=len(txt_files),
+            desc="Cleaning files"
+        ))
+    
+    # Count results
+    for status, filename, info in results:
+        if status == 'success':
             cleaned_count += 1
-            if cleaned_count % 100 == 0:
-                print(f"Processed {cleaned_count} files...")
-                
-        except Exception as e:
-            print(f"Failed to process {txt_file.name}: {e}")
+        elif status == 'skipped':
+            skipped_count += 1
+            print(f"Skipped {filename}: {info}")
+        elif status == 'failed':
             failed_count += 1
-            continue
+            print(f"Failed {filename}: {info}")
     
     print(f"\n{'='*60}")
     print(f"Cleaning complete!")
@@ -173,6 +209,12 @@ def main() -> int:
         default=1000,
         help="Minimum character length for valid cleaned text (default: 1000)"
     )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="Number of parallel workers (default: CPU count - 1)"
+    )
     
     args = parser.parse_args()
     
@@ -183,7 +225,7 @@ def main() -> int:
         print(f"Error: Input directory {input_dir} does not exist")
         return 1
     
-    clean_dataset(input_dir, output_dir, args.min_length)
+    clean_dataset(input_dir, output_dir, args.min_length, args.num_workers)
     return 0
 
 

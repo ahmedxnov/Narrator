@@ -20,7 +20,8 @@ This project demonstrates how to:
   - Flesch Reading Ease Score: 81-100 (very easy to read)
 - **Final Dataset**: 4,036 stories
 - **Train/Val Split**: 3,631 train / 405 validation (90/10)
-- **Training Chunks**: 106,598 chunks (1,024 tokens each for speed/memory)
+- **Training Chunks**: 228,425 train / 24,533 validation (1,024 tokens each)
+- **Optimized Training**: ~9-10 hours on Google Colab T4 (50% of data)
 
 ## 🗂️ Project Structure
 
@@ -30,8 +31,8 @@ Narrator/
 │   ├── download_gutenberg.py        # Download books from Project Gutenberg
 │   ├── clean_dataset.py             # Remove boilerplate, clean text
 │   ├── create_train_val_split.py    # Split into train/validation
-│   ├── prepare_clm_dataset.py       # Tokenize and chunk for CLM
-│   └── convert_meta_to_hf.py        # Convert Meta checkpoint to HF format
+│   ├── prepare_dataset.py           # Chunk stories and tokenize to Arrow format
+│   └── train.py                     # Fine-tune model with QLoRA
 │
 ├── notebooks/                        # Jupyter notebooks
 │   └── EDA_books.ipynb              # Exploratory data analysis & filtering
@@ -41,12 +42,11 @@ Narrator/
 │
 ├── split_data/                      # Train/val split (gitignored)
 │   ├── train/                       # Training stories (3,631 files)
-│   └── val/                         # Validation stories (404 files)
+│   └── val/                         # Validation stories (405 files)
 │
-├── processed_data/                  # Tokenized chunks (gitignored)
-│   ├── train.jsonl                  # 106,598 training chunks
-│   ├── val.jsonl                    # 11,449 validation chunks
-│   └── dataset_info.json            # Dataset metadata
+├── tokenized_data_1024/             # Pre-tokenized datasets (gitignored)
+│   ├── train/                       # Tokenized training chunks (Arrow format)
+│   └── validation/                  # Tokenized validation chunks (Arrow format)
 │
 ├── models/                          # Model checkpoints (gitignored)
 │   └── llama-3.2-3b-hf/            # Converted Hugging Face model
@@ -88,8 +88,8 @@ python scripts/clean_dataset.py --input-dir dataset --output-dir cleaned_dataset
 # Create train/val split
 python scripts/create_train_val_split.py --input-dir cleaned_dataset --output-dir split_data --train-ratio 0.9
 
-# Prepare for CLM training
-python scripts/prepare_clm_dataset.py --model-name meta-llama/Llama-3.2-3B --max-length 2048
+# Prepare tokenized dataset (chunks and tokenizes in one step)
+python scripts/prepare_dataset.py --max-length 1024 --output-dir tokenized_data_1024
 ```
 
 #### Option B: Filter Books Yourself
@@ -120,30 +120,29 @@ model:
 ```
 Requires HuggingFace access token. Model auto-downloads on first run.
 
-### 4. Pre-tokenize Dataset (Critical for Speed)
+### 4. Fine-tuning
 
 ```bash
-# Pre-tokenize to Arrow format for fast data loading
-python scripts/prepare_tokenized_dataset.py \
-    --max_length 1024 \
-    --output_dir ~/tokenized_data_1024
-
-# Update configs/training_config.yaml to point to tokenized data
-```
-
-### 5. Fine-tuning
-
-```bash
-# WSL2/Ubuntu recommended (Windows has 50-100x slowdown with gradient checkpointing)
+# WSL2/Ubuntu or Google Colab recommended
 python -m scripts.train
 ```
 
 ## 💾 Hardware Requirements
 
+### Option 1: Google Colab (Recommended)
+- **GPU**: T4 (16GB VRAM) - Free tier
+- **Training Time**: ~9-10 hours for 50% of dataset
+- **Storage**: Upload `tokenized_data_1024/` (~5GB compressed)
+- **Pros**: No setup, more VRAM, free
+- **Cons**: 12-hour session limit, internet required
+
+### Option 2: Local GPU
 - **GPU**: 12GB VRAM minimum (tested on RTX 5070 with QLoRA 4-bit)
 - **RAM**: 32GB recommended
 - **Storage**: ~50GB for dataset and model checkpoints
 - **OS**: WSL2 Ubuntu 22.04 REQUIRED (Windows native has critical PyTorch bugs causing 50-100x slowdown)
+- **Pros**: No time limits, faster for local data
+- **Cons**: Setup complexity, electricity costs
 
 ## 📚 Dataset Curation Process
 
@@ -183,53 +182,66 @@ python scripts/download_gutenberg.py \
 ```
 
 ### `clean_dataset.py`
-Removes Project Gutenberg boilerplate and cleans text.
+Removes Project Gutenberg boilerplate and cleans text with parallel processing.
 
 ```bash
 python scripts/clean_dataset.py \
     --input-dir dataset \
     --output-dir cleaned_dataset \
-    --min-length 1000  # Minimum characters after cleaning
+    --min-length 1000 \
+    --num-workers 8  # Parallel processing (optional)
 ```
 
 ### `create_train_val_split.py`
-Creates train/validation split with reproducible shuffling.
+Creates train/validation split with reproducible shuffling and parallel file copying.
 
 ```bash
 python scripts/create_train_val_split.py \
     --input-dir cleaned_dataset \
     --output-dir split_data \
     --train-ratio 0.9 \
-    --seed 42
+    --seed 42 \
+    --num-workers 8  # Parallel file copying (optional)
 ```
 
-### `prepare_clm_dataset.py`
-Tokenizes and chunks stories for causal language modeling.
+### `prepare_dataset.py`
+Chunks stories and tokenizes them directly to Arrow format with parallel processing.
 
 ```bash
-python scripts/prepare_clm_dataset.py \
-    --train-dir data/train \
-    --val-dir data/val \
-    --output-dir processed_data \
+python scripts/prepare_dataset.py \
+    --train-dir split_data/train \
+    --val-dir split_data/val \
+    --output-dir tokenized_data_1024 \
     --model-name meta-llama/Llama-3.2-3B \
-    --max-length 2048 \
-    --overlap 128
+    --max-length 1024 \
+    --overlap 128 \
+    --num-workers 11  # Parallel tokenization (auto-detects if omitted)
 ```
+
+**Features:**
+- Combines chunking and tokenization in one optimized step
+- Parallel tokenization across CPU cores (~11 workers on modern CPUs)
+- Saves directly to Arrow format for instant data loading
+- Completes in ~5 minutes with parallelization (vs ~30+ minutes sequential)
+- Output: 228,425 train chunks, 24,533 validation chunks
 
 ## 🎓 Training Configuration
 
-Training uses QLoRA (4-bit quantization + LoRA) with:
+Training uses QLoRA (4-bit quantization + LoRA) optimized for Google Colab T4:
 - **Base Model**: Llama 3.2 3B (4-bit NF4 quantization)
 - **Precision**: BFloat16 compute, 4-bit weights
 - **LoRA Rank**: 16
 - **LoRA Alpha**: 32
 - **Target Modules**: q_proj, k_proj, v_proj, o_proj
 - **Sequence Length**: 1,024 tokens
-- **Batch Size**: 1 per device
+- **Batch Size**: 8 per device (with gradient accumulation = 2)
+- **Effective Batch Size**: 16
+- **Epochs**: 0.5 (50% of data, ~114K samples)
 - **Learning Rate**: 2e-4 with cosine schedule
 - **Optimizer**: paged_adamw_8bit
-- **Gradient Checkpointing**: DISABLED (causes massive slowdown)
-- **Speed**: ~5.35s/step on RTX 5070 12GB
+- **Gradient Checkpointing**: DISABLED (for speed)
+- **Training Time**: ~9-10 hours on T4 16GB
+- **VRAM Usage**: ~12-14GB during training
 
 ## 📝 License
 
@@ -241,8 +253,8 @@ This project is for educational purposes. Individual components:
 ## 🙏 Acknowledgments
 
 - [Project Gutenberg](https://www.gutenberg.org/) for providing public domain books
-- Meta AI for releasing Llama 3.2
-- Hugging Face for the Transformers library
+- [Meta AI](https://www.meta.ai/) for releasing Llama 3.2
+- [Hugging Face](https://huggingface.co/) for the Transformers library
 - The open-source community for QLoRA and PEFT
 
 ## 📧 Contact
@@ -251,4 +263,4 @@ For questions or collaborations, please open an issue on GitHub.
 
 ---
 
-**Note**: Training in progress. Model adapters will be released upon completion (~6-7 days on RTX 5070).
+**Note**: Optimized for fast iteration. Training completes in ~9-10 hours on Google Colab T4 with 50% of dataset. Increase `num_train_epochs` in `configs/training_config.yaml` for full training.
