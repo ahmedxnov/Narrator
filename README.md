@@ -18,9 +18,9 @@ This project demonstrates how to:
   - Language: English only
   - Categories: 45 curated child-friendly shelves (animals, fairy tales, children's fiction, mythology, etc.)
   - Flesch Reading Ease Score: 81-100 (very easy to read)
-- **Final Dataset**: 4,035 stories
-- **Train/Val Split**: 3,631 train / 404 validation (90/10)
-- **Training Chunks**: 106,598 chunks (2,048 tokens each with 128 token overlap)
+- **Final Dataset**: 4,036 stories
+- **Train/Val Split**: 3,631 train / 405 validation (90/10)
+- **Training Chunks**: 106,598 chunks (1,024 tokens each for speed/memory)
 
 ## 🗂️ Project Structure
 
@@ -98,33 +98,52 @@ See `notebooks/EDA_books.ipynb` for the complete filtering process.
 
 ### 3. Model Preparation
 
-#### Option A: Use Hugging Face Model (Recommended)
+#### Option A: Convert Meta Checkpoint (Current Setup)
 
-The training script will automatically download `meta-llama/Llama-3.2-3B` from Hugging Face (requires access token).
-
-#### Option B: Convert Meta Checkpoint
-
-If you have the Meta original checkpoint:
+1. Download Llama 3.2 3B from Meta AI
+2. Convert to HuggingFace format:
 
 ```bash
-python scripts/convert_meta_to_hf.py \
-    --input-dir "C:/Users/YourUser/.llama/checkpoints/Llama3.2-3B" \
+python scripts/convert_checkpoint.py \
+    --input-dir "path/to/meta/checkpoint" \
     --output-dir "models/llama-3.2-3b-hf"
 ```
 
-### 4. Fine-tuning
+The model will be saved to `models/llama-3.2-3b-hf/` and training will use this local path.
+
+#### Option B: Use HuggingFace Hub (Alternative)
+
+Change `training_config.yaml`:
+```yaml
+model:
+  name: "meta-llama/Llama-3.2-3B"  # Instead of models/llama-3.2-3b-hf
+```
+Requires HuggingFace access token. Model auto-downloads on first run.
+
+### 4. Pre-tokenize Dataset (Critical for Speed)
 
 ```bash
-# Coming soon: Fine-tuning script with QLoRA
-python scripts/train.py --config configs/training_config.yaml
+# Pre-tokenize to Arrow format for fast data loading
+python scripts/prepare_tokenized_dataset.py \
+    --max_length 1024 \
+    --output_dir ~/tokenized_data_1024
+
+# Update configs/training_config.yaml to point to tokenized data
+```
+
+### 5. Fine-tuning
+
+```bash
+# WSL2/Ubuntu recommended (Windows has 50-100x slowdown with gradient checkpointing)
+python -m scripts.train
 ```
 
 ## 💾 Hardware Requirements
 
-- **GPU**: 12GB VRAM minimum (tested on RTX 5070, BF16 precision)
+- **GPU**: 12GB VRAM minimum (tested on RTX 5070 with QLoRA 4-bit)
 - **RAM**: 32GB recommended
 - **Storage**: ~50GB for dataset and model checkpoints
-- **OS**: Windows 11 (tested), Linux recommended for quantization support
+- **OS**: WSL2 Ubuntu 22.04 REQUIRED (Windows native has critical PyTorch bugs causing 50-100x slowdown)
 
 ## 📚 Dataset Curation Process
 
@@ -149,7 +168,7 @@ See `notebooks/EDA_books.ipynb` for detailed analysis.
 - **Clean Codebase**: Modular scripts for each step
 - **Reproducible**: Fixed random seeds and documented process
 - **GPU Optimized**: Designed for consumer GPUs (12GB VRAM)
-- **Windows Compatible**: Works natively on Windows without WSL
+- **Memory Efficient**: QLoRA reduces 30GB to 8GB requirement
 
 ## 📖 Scripts Documentation
 
@@ -199,15 +218,18 @@ python scripts/prepare_clm_dataset.py \
 
 ## 🎓 Training Configuration
 
-Training uses LoRA with the following settings:
-- **Base Model**: Llama 3.2 3B
-- **Precision**: BF16 (bfloat16)
-- **LoRA Rank**: 64
-- **LoRA Alpha**: 16
-- **Sequence Length**: 2,048 tokens
-- **Batch Size**: 2 per device (effective 16 with gradient accumulation)
+Training uses QLoRA (4-bit quantization + LoRA) with:
+- **Base Model**: Llama 3.2 3B (4-bit NF4 quantization)
+- **Precision**: BFloat16 compute, 4-bit weights
+- **LoRA Rank**: 16
+- **LoRA Alpha**: 32
+- **Target Modules**: q_proj, k_proj, v_proj, o_proj
+- **Sequence Length**: 1,024 tokens
+- **Batch Size**: 1 per device
 - **Learning Rate**: 2e-4 with cosine schedule
-- **Gradient Checkpointing**: Enabled for memory efficiency
+- **Optimizer**: paged_adamw_8bit
+- **Gradient Checkpointing**: DISABLED (causes massive slowdown)
+- **Speed**: ~5.35s/step on RTX 5070 12GB
 
 ## 📝 License
 
@@ -229,4 +251,4 @@ For questions or collaborations, please open an issue on GitHub.
 
 ---
 
-**Note**: This project is currently under active development. The fine-tuning script and trained model will be added soon.
+**Note**: Training in progress. Model adapters will be released upon completion (~6-7 days on RTX 5070).
