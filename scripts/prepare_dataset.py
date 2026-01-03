@@ -139,8 +139,14 @@ def prepare_and_tokenize_split(
     # Use sequential processing for 1 worker (avoids multiprocessing overhead)
     if num_workers == 1:
         print(f"  Tokenizing sequentially (1 worker)...")
+        # Suppress warnings for long sequences
+        import warnings
+        import logging
+        warnings.filterwarnings('ignore')
+        logging.getLogger("transformers").setLevel(logging.ERROR)
+        
         all_tokens = []
-        for story in tqdm(stories, desc="Tokenizing stories"):
+        for story in tqdm(stories, total=len(stories), desc="Tokenizing stories"):
             story_with_sep = f"{story}\n{eos_token}\n"
             tokens = tokenizer.encode(story_with_sep, add_special_tokens=False, truncation=False)
             all_tokens.append(tokens)
