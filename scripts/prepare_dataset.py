@@ -174,11 +174,19 @@ def prepare_and_tokenize_split(
     
     print(f"  Created {len(token_chunks):,} chunks")
     
-    # Create dataset from pre-tokenized chunks
-    dataset = Dataset.from_dict({
-        "input_ids": token_chunks,
-        "labels": token_chunks,  # For CLM, labels are the same as input_ids
-    })
+    # Free memory from all_tokens before creating dataset
+    del all_tokens
+    
+    # Create dataset using generator to reduce peak memory usage
+    def chunk_generator():
+        for chunk in token_chunks:
+            yield {"input_ids": chunk, "labels": chunk}
+    
+    print(f"  Converting to Arrow format (memory-efficient)...")
+    dataset = Dataset.from_generator(chunk_generator, num_proc=1)
+    
+    # Free the token_chunks list
+    del token_chunks
     
     return dataset
 
