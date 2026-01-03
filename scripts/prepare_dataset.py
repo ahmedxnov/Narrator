@@ -306,7 +306,7 @@ def main() -> int:
     dataset_dict.save_to_disk(str(output_dir))
     
     print("\n" + "="*60)
-    print("✅ Dataset preparation complete!")
+    print("  Dataset preparation complete!")
     print(f"   Output: {output_dir}/")
     print(f"   Train: {len(train_dataset):,} chunks")
     print(f"   Validation: {len(val_dataset):,} chunks")
