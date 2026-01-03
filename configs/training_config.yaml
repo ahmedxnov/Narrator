@@ -1,0 +1,79 @@
+# Training Configuration for Llama 3.2 3B Fine-tuning
+
+# Model settings
+model:
+  name: "models/llama-3.2-3b-hf"  # Use local converted model
+  max_seq_length: 1024  # Reduced from 2048 for speed
+  
+# QLoRA 4-bit quantization for speed and memory efficiency
+quantization:
+  load_in_4bit: true   # Enable 4-bit QLoRA
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_use_double_quant: true
+
+# LoRA configuration (Optimized for 12GB VRAM)
+lora:
+  r: 16                    # LoRA rank
+  lora_alpha: 32           # LoRA scaling factor (2x rank)
+  target_modules:          # 4 attention heads
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+# Training hyperparameters (Optimized for RTX 5070 12GB on WSL2/Ubuntu)
+training:
+  output_dir: "./checkpoints"
+  num_train_epochs: 1                      # Start with 1 epoch, monitor overfitting
+  per_device_train_batch_size: 1           # Reduced for 12GB VRAM
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 1           # No accumulation for max speed
+  learning_rate: 2.0e-4                    # Standard for QLoRA fine-tuning
+  weight_decay: 0.01
+  warmup_ratio: 0.05                       # 5% warmup
+  lr_scheduler_type: "cosine"
+  
+  # Optimization
+  optim: "paged_adamw_8bit"         # 8-bit paged optimizer for QLoRA
+  max_grad_norm: 1.0
+  
+  # Memory optimization
+  gradient_checkpointing: false  # Not needed with 4-bit QLoRA (only uses ~2GB)
+  fp16: false
+  bf16: true  # Use bfloat16 (best for RTX 50-series)
+  
+  # Logging and evaluation
+  logging_steps: 10
+  eval_strategy: "steps"
+  eval_steps: 500
+  save_strategy: "steps"
+  save_steps: 500
+  save_total_limit: 3
+  
+  # Data loading
+  dataloader_num_workers: 0      # Disable workers to save memory
+  dataloader_pin_memory: true    # Enable for faster GPU transfer
+  
+  # Reproducibility
+  seed: 42
+  
+  # Performance optimization
+  torch_compile: false  # Set true for PyTorch 2.x speedup (first epoch slower due to compilation)
+
+# Dataset paths
+data:
+  tokenized_dir: "/home/ahmedxnov/tokenized_data_1024"  # Linux filesystem, 1024 seq length
+  
+# Weights & Biases (optional)
+wandb:
+  enabled: false
+  project: "narrator-llama32-3b"
+  run_name: "llama32-3b-children-stories"
+  
+# GPU settings
+device:
+  cuda_visible_devices: "0"  # Use first GPU
