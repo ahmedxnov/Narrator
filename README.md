@@ -4,11 +4,13 @@ A complete pipeline for fine-tuning Meta's Llama 3.2 3B model on high-quality ch
 
 ## 🎯 Project Overview
 
-This project demonstrates how to:
-- Filter and curate 4,000+ child-friendly stories from Project Gutenberg's 71,000+ book collection
-- Clean and prepare text data for language model training
-- Fine-tune Llama 3.2 3B using QLoRA on consumer GPUs (12GB+)
-- Generate child-friendly narratives using the trained model
+This project provides an end-to-end pipeline for fine-tuning Llama 3.2 3B on children's stories:
+
+- **4,036 High-Quality Stories**: Curated from Project Gutenberg with Flesch readability scores 81-100, filtered across 45 child-friendly categories
+- **Parallel Processing Throughout**: Multi-core optimization reduces data preparation from hours to minutes (5-10x speedup on cleaning, splitting, and tokenization)
+- **Pre-tokenized Arrow Datasets**: 228,425 training chunks ready for instant loading—no tokenization bottleneck during training
+- **Fits on Free Hardware**: QLoRA 4-bit quantization + optimized hyperparameters complete training in 9-10 hours on Google Colab T4 (12GB VRAM)
+- **Production-Grade Pipeline**: Modular scripts with error handling, reproducible configurations, comprehensive documentation
 
 ## 📊 Dataset Statistics
 
@@ -172,12 +174,15 @@ See `notebooks/EDA_books.ipynb` for detailed analysis.
 
 ## 🛠️ Key Features
 
-- **LoRA Training**: Parameter-efficient fine-tuning in BF16 precision
-- **Automated Pipeline**: From raw data to trained model
-- **Clean Codebase**: Modular scripts for each step
-- **Reproducible**: Fixed random seeds and documented process
-- **GPU Optimized**: Designed for consumer GPUs (12GB VRAM)
-- **Memory Efficient**: QLoRA reduces 30GB to 8GB requirement
+- **Parallel Data Processing**: Multi-core parallelization across the entire pipeline
+  - Text cleaning: ~5x faster with parallel processing
+  - Train/val splitting: Parallel file copying
+  - Tokenization: ~6x faster with 11 workers (5 min vs 30+ min)
+- **QLoRA 4-bit Training**: Parameter-efficient fine-tuning reduces VRAM from 30GB to 8GB
+- **Pre-tokenized Datasets**: Arrow format eliminates tokenization bottleneck during training
+- **Optimized for Speed**: Completes in ~9-10 hours on Google Colab T4 (50% of dataset)
+- **Clean & Modular**: Separate scripts for each pipeline stage with comprehensive error handling
+- **Reproducible**: Fixed random seeds, documented hyperparameters, version-controlled configs
 
 ## 📖 Scripts Documentation
 
