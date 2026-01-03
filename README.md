@@ -64,7 +64,7 @@ Narrator/
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/narrator.git
+git clone https://github.com/ahmedxnov/narrator.git
 cd narrator
 
 # Create a conda environment
@@ -261,7 +261,7 @@ Training uses QLoRA (4-bit quantization + LoRA) optimized for Google Colab T4:
 ## 📝 License
 
 This project is for educational purposes. Individual components:
-- **Code**: MIT License
+- **Code**: [MIT License](LICENSE)
 - **Dataset**: Project Gutenberg texts are in the public domain
 - **Model**: Llama 3.2 is subject to Meta's license agreement
 
