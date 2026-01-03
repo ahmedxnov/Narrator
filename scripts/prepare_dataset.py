@@ -134,24 +134,34 @@ def prepare_and_tokenize_split(
     if num_workers is None:
         num_workers = max(1, cpu_count() - 1)
     
-    # Save tokenizer locally for workers to use (avoids HF rate limits)
-    import tempfile
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tokenizer_path = Path(tmpdir) / "tokenizer"
-        tokenizer.save_pretrained(tokenizer_path)
-        
-        # Parallel tokenization using local tokenizer
-        print(f"  Tokenizing with {num_workers} workers...")
-        eos_token = tokenizer.eos_token
-        
-        args_list = [(story, str(tokenizer_path), eos_token) for story in stories]
-        
-        with Pool(num_workers) as pool:
-            all_tokens = list(tqdm(
-                pool.imap(tokenize_story, args_list),
-                total=len(stories),
-                desc="Tokenizing stories"
-            ))
+    eos_token = tokenizer.eos_token
+    
+    # Use sequential processing for 1 worker (avoids multiprocessing overhead)
+    if num_workers == 1:
+        print(f"  Tokenizing sequentially (1 worker)...")
+        all_tokens = []
+        for story in tqdm(stories, desc="Tokenizing stories"):
+            story_with_sep = f"{story}\n{eos_token}\n"
+            tokens = tokenizer.encode(story_with_sep, add_special_tokens=False, truncation=False)
+            all_tokens.append(tokens)
+    else:
+        # Save tokenizer locally for workers to use (avoids HF rate limits)
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tokenizer_path = Path(tmpdir) / "tokenizer"
+            tokenizer.save_pretrained(tokenizer_path)
+            
+            # Parallel tokenization using local tokenizer
+            print(f"  Tokenizing with {num_workers} workers...")
+            
+            args_list = [(story, str(tokenizer_path), eos_token) for story in stories]
+            
+            with Pool(num_workers) as pool:
+                all_tokens = list(tqdm(
+                    pool.imap(tokenize_story, args_list),
+                    total=len(stories),
+                    desc="Tokenizing stories"
+                ))
     
     # Sequential chunking (maintains context flow across stories)
     token_chunks = chunk_tokenized_stories(all_tokens, max_length, overlap)
